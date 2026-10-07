@@ -1,18 +1,83 @@
 # omatorsurf
 
-Rust CLI backend for system-wide Tor routing on Arch Linux/Omarchy. The backend manages Tor, nftables and systemd through a command-line interface.
+**Version: 1.0.0** — MIT licensed. The package version is defined in [Cargo.toml](Cargo.toml); check your installed binary with `omatorsurf version` or `omatorsurf --version`.
 
-## Build and install
+Rust CLI backend for system-wide Tor routing on Arch Linux/Omarchy. The backend manages Tor, nftables and systemd through a command-line interface. Once enabled, the kernel routing rules cover applications, browsers and background services on the host, including applications launched outside the terminal.
 
-Dependencies: Rust 1.89 or newer/Cargo, tor, nftables, systemd, iproute2, curl, Python and python-stem. Install missing packages explicitly through `pkexec /usr/bin/pacman -S tor nftables iproute2 curl python-stem`. Run the installer from the cloned repository:
+Tor routes supported TCP traffic and DNS requests. This build blocks other outbound IP traffic according to the protection policy below. It provides a CLI backend; no desktop GUI or privileged IPC daemon is included.
+
+## Requirements
+
+- Arch Linux or Omarchy with systemd.
+- Tor, nftables, iproute2 (`ss`), curl, Python and python-stem.
+- `pkexec` and working polkit authentication for privileged operations.
+- Standard Bash, coreutils and util-linux tools, including `runuser` for automatic builds and `flock` for uninstall locking.
+- Rust 1.89 or newer and Cargo when a release needs building; Git for cloning/updating the repository.
+
+The installer checks runtime dependencies and the Tor service account/group. It reports missing dependencies rather than installing them automatically. To install the main runtime packages explicitly:
 
 ```bash
+pkexec /usr/bin/pacman -S --needed tor nftables iproute2 curl python-stem
+```
+
+## Install
+
+Clone as your regular user, then launch the installer through pkexec:
+
+```bash
+git clone https://github.com/7ang0n1n3/omatorsurf.git
+cd omatorsurf
 pkexec "$(pwd)/scripts/install.sh"
 ```
 
-If the default release is missing, the installer runs `cargo build --locked --release` as the user who invoked pkexec, then installs it with root privileges. An existing release is reused. To rebuild after source changes, run `cargo build --locked --release` as your regular user before installation. Cargo and build scripts are never run as root.
+### Installer behavior
 
-The installer preserves configuration and refuses differing Tor/service files before installing. It installs the release binary and three dedicated systemd units and never enables or starts them automatically. Use `--binary /absolute/path/to/omatorsurf` to select an existing executable; a missing custom binary is reported as an error.
+- The default binary is `target/release/omatorsurf` inside the checkout.
+- If that binary is missing, the installer runs `cargo build --locked --release --target-dir <checkout>/target` as the user who invoked pkexec, then installs it with root privileges. Cargo and build scripts are never run as root.
+- An existing executable release is reused. Installation does not rebuild it when source files change.
+- An existing default release that is not executable is reported as an error. A missing or non-executable custom binary also fails without an automatic build.
+- Existing `/etc/omatorsurf/config.toml` is preserved. Its configuration determines the generated Tor configuration. Differing installed Tor configuration or unit files cause installation to stop before deployment files are written; back them up and review the differences before replacement.
+- Installation does not start/enable services or apply firewall rules. Start routing explicitly afterward.
+
+To install another existing executable:
+
+```bash
+pkexec "$(pwd)/scripts/install.sh" --binary /absolute/path/to/omatorsurf
+```
+
+View installer help without root:
+
+```bash
+./scripts/install.sh --help
+```
+
+### Installed files
+
+| Path | Purpose |
+| --- | --- |
+| `/usr/local/bin/omatorsurf` | Application binary |
+| `/etc/omatorsurf/config.toml` | System configuration; existing file is preserved |
+| `/etc/omatorsurf/torrc` | Generated Tor configuration |
+| `/usr/share/omatorsurf/omatorsurf.nft` | Firewall template; installing it does not apply rules |
+| `/etc/systemd/system/omatorsurf.service` | Optional routing startup unit |
+| `/etc/systemd/system/omatorsurf-guard.service` | Early network guard unit |
+| `/etc/systemd/system/omatorsurf-tor.service` | Dedicated application Tor unit |
+| `/run/omatorsurf/` | Runtime state and transaction lock |
+
+The dedicated Tor service creates its private state under `/var/lib/omatorsurf/tor`. Keep the checkout if you want to use its install/uninstall scripts later; these scripts are not copied into `/usr/local/bin`.
+
+### Rebuild and update
+
+From the checkout, update the source and explicitly rebuild an existing release as your regular user:
+
+```bash
+git pull --ff-only
+cargo build --locked --release --target-dir "$(pwd)/target"
+pkexec "$(pwd)/scripts/install.sh"
+omatorsurf version
+```
+
+To build manually before a first installation, use the same Cargo command. Rust dependencies may need network access unless they are already cached. The installer also refuses automatic compilation when it cannot identify a non-root build account.
 
 ## Use
 
@@ -27,6 +92,19 @@ pkexec /usr/local/bin/omatorsurf stop
 ```
 
 Full status/check require root because nftables inspection needs privileges. The application never launches an internal privilege prompt. Unattended GUI access would require a future privileged service with authenticated IPC.
+
+| Command | Behavior |
+| --- | --- |
+| `start` | Install protection, start Tor and verify the protected route |
+| `stop` | Stop application Tor and remove application networking restrictions |
+| `status` / `status --json` | Observe actual Tor, firewall and routing state |
+| `check` | Run live health checks; return nonzero on required failures |
+| `new-circuit` | Request new circuits for future Tor connections |
+| `version` / `--version` | Print the installed application version without root |
+
+Use the top-level `start` command to enable system-wide protection. The diagnostic `tor start` command starts only application Tor and does not install networking protection. Closing the terminal does not remove installed kernel rules; explicit `stop` or uninstall removes them.
+
+Status reports `protected` only when the complete rules, Tor readiness and a fresh route check succeed. `degraded` means the application table exists but protection or connectivity is incomplete; a retained guard can block traffic while Tor is unavailable. `disabled` means the application table is absent. A successful status command means an observation was obtained, so inspect its fields to determine protection.
 
 `start` installs the kill switch before starting Tor, checks bootstrap/listeners, DNS rules, and a fresh HTTPS response from Tor Project's IP API. Repeated start replaces the owned table atomically. Startup failure leaves any installed guard in place; retry `start` to recover or explicitly `stop` to restore direct networking. Failed Tor shutdown retains the guard. `stop` affects only application Tor and `inet omatorsurf`; repeated stop is safe.
 
@@ -71,20 +149,72 @@ pkexec /usr/bin/systemctl disable --now omatorsurf.service
 pkexec /usr/local/bin/omatorsurf stop
 ```
 
-Manual CLI start does **not** persist protection through reboot. Optional service startup has been tested on the running host; actual reboot, suspend/resume, initramfs networking and network-manager-specific boot ordering still need VM/hardware validation. Do not assume protection before the early guard has successfully installed. The installer leaves boot startup disabled.
+Manual CLI start does **not** persist protection through reboot. Optional service startup has been tested on the running host; actual reboot, suspend/resume, initramfs networking and network-manager-specific boot ordering still need VM/hardware validation. Do not assume protection before the early guard has successfully installed. Boot startup is opt-in; installation does not change existing service enablement.
 
 ## Uninstall
 
-The uninstaller stops/disables the three application units, removes only the owned firewall table, restores direct networking and removes installed application files. Configuration and Tor data are preserved by default. It leaves dependency packages and the source checkout in place. It also works when the installed binary or configuration is damaged. If service/firewall cleanup fails, it aborts before removing installed files.
+Run from the checkout:
 
 ```bash
 pkexec "$(pwd)/scripts/uninstall.sh"
 ```
 
-To also delete application configuration and Tor data:
+The uninstaller:
+
+1. Checks ownership of `inet omatorsurf` and refuses to remove an unrecognized table.
+2. Stops/disables the three application units and obtains the transaction lock.
+3. Removes only the owned application firewall table and confirms removal.
+4. Removes installed unit files, reloads systemd, and removes the installed binary, template and `state.json`.
+
+Removing the application guard permits direct networking again, subject to any unrelated firewall rules. Resolver files need no restoration because the application never rewrites them. The uninstaller does not require a working application binary or configuration. Service/firewall cleanup failure stops removal of installed files; a busy transaction lock requires retrying after the other operation finishes.
+
+| Item | Default uninstall | With `--purge` |
+| --- | --- | --- |
+| Application binary, template and units | Removed | Removed |
+| Application firewall table and `state.json` | Removed | Removed |
+| `/etc/omatorsurf` configuration | Preserved | Deleted |
+| `/var/lib/omatorsurf` Tor data | Preserved | Deleted |
+| Dependency packages, checkout and unrelated services/tables | Preserved | Preserved |
+
+To also delete application configuration and persistent Tor data:
 
 ```bash
 pkexec "$(pwd)/scripts/uninstall.sh" --purge
+```
+
+The runtime lock is deliberately retained under `/run/omatorsurf` until reboot to avoid unlinking a lock held during cleanup. Other files in `/usr/share/omatorsurf` are preserved if present; custom systemd drop-in directories are not deleted by the script.
+
+View uninstall help without root:
+
+```bash
+./scripts/uninstall.sh --help
+```
+
+## Troubleshooting
+
+For startup, bootstrap or route-check failures, inspect live state and the application Tor journal:
+
+```bash
+pkexec /usr/local/bin/omatorsurf status --json
+pkexec /usr/local/bin/omatorsurf check
+pkexec /usr/bin/journalctl -u omatorsurf-tor.service --no-pager -n 100
+```
+
+A failed startup can leave networking blocked by the guard. Retry `start` after resolving the cause, or explicitly run `stop` to allow direct networking. Completed Tor bootstrap alone does not guarantee an immediately reachable exit circuit or external endpoint.
+
+Additional inspection commands:
+
+```bash
+pkexec /usr/local/bin/omatorsurf tor status --json
+pkexec /usr/local/bin/omatorsurf firewall status --json
+pkexec /usr/local/bin/omatorsurf firewall check
+omatorsurf tor config
+```
+
+`firewall check` validates a proposed nftables transaction without applying it. `tor config` prints the configuration expected at `/etc/omatorsurf/torrc`. For debug output from health checks:
+
+```bash
+pkexec /usr/bin/env RUST_LOG=debug /usr/local/bin/omatorsurf check
 ```
 
 ## API and project layout

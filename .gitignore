@@ -1,0 +1,15 @@
+/target/
+/backup/
+
+# Local editor and operating system files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Local credentials and environment overrides
+.env
+.env.*
+!.env.example

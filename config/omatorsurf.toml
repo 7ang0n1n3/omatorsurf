@@ -1,0 +1,14 @@
+# Default system path: /etc/omatorsurf/config.toml
+[tor]
+socks_port = 9050
+trans_port = 9040
+dns_port = 5353
+control_port = 9051
+readiness_timeout_seconds = 120
+
+[network]
+ipv6 = "block"
+killswitch = true
+
+[general]
+verify_connection = true

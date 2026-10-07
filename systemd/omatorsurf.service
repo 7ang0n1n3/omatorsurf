@@ -1,0 +1,17 @@
+[Unit]
+Description=Omatorsurf anonymous routing
+Requires=omatorsurf-guard.service
+Wants=network-online.target
+After=omatorsurf-guard.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/omatorsurf start
+# Service shutdown retains the kill switch. Explicit CLI stop restores networking.
+ExecStop=/usr/local/bin/omatorsurf tor stop
+TimeoutStartSec=900
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target

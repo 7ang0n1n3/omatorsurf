@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Omatorsurf status API v1",
+  "type": "object",
+  "required": ["enabled", "tor_running", "firewall_active", "killswitch", "dns_protected", "ipv6_protected", "public_ip", "protection_state", "errors"],
+  "properties": {
+    "enabled": {"type": "boolean"},
+    "tor_running": {"type": "boolean"},
+    "firewall_active": {"type": "boolean"},
+    "killswitch": {"type": "boolean"},
+    "dns_protected": {"type": "boolean"},
+    "ipv6_protected": {"type": "boolean"},
+    "public_ip": {"type": ["string", "null"], "format": "ipv4"},
+    "protection_state": {"type": "string", "enum": ["protected", "degraded", "disabled"]},
+    "errors": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}

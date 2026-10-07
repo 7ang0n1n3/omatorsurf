@@ -1,0 +1,14 @@
+[Unit]
+Description=Omatorsurf early fail-closed network guard
+DefaultDependencies=no
+After=local-fs.target
+Before=network-pre.target
+Wants=network-pre.target
+PartOf=omatorsurf.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/omatorsurf firewall guard
+# Do not remove kernel rules on failure, stop, or shutdown.
+TimeoutStartSec=30

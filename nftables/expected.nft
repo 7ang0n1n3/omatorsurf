@@ -1,0 +1,23 @@
+table inet omatorsurf {
+ comment "omatorsurf managed table v1"
+ chain redirect_output {
+  type nat hook output priority -100; policy accept;
+  meta skuid @TOR_UID@ return
+  meta nfproto 2 udp dport 53 redirect to :@DNS_PORT@
+  oifname "lo" return
+  ip daddr 10.192.0.0/10 meta l4proto 6 redirect to :@TRANS_PORT@
+  ip daddr { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/3 } return
+  meta nfproto 2 meta l4proto 6 redirect to :@TRANS_PORT@
+ }
+ chain guard_output {
+  type filter hook output priority 0; policy drop;
+  oifname "lo" accept
+  ip daddr 127.0.0.1 ct status 0x20 tcp dport @TRANS_PORT@ accept
+  ip daddr 127.0.0.1 ct status 0x20 udp dport @DNS_PORT@ accept
+  meta nfproto 2 meta skuid @TOR_UID@ meta l4proto 6 accept
+  udp sport 68 udp dport 67 ip daddr { 10.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 255.255.255.255 } accept
+ }
+ chain guard_forward {
+  type filter hook forward priority 0; policy drop;
+ }
+}

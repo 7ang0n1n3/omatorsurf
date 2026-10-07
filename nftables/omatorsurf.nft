@@ -1,0 +1,26 @@
+# Template: render through omatorsurf firewall render before passing to nft.
+table inet omatorsurf {
+    comment "omatorsurf managed table v1"
+    chain redirect_output {
+        type nat hook output priority dstnat; policy accept;
+        meta skuid @TOR_UID@ return
+        meta nfproto ipv4 udp dport 53 redirect to :@DNS_PORT@
+        oifname "lo" return
+        ip daddr 10.192.0.0/10 meta l4proto tcp redirect to :@TRANS_PORT@
+        ip daddr { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4 } return
+        meta nfproto ipv4 meta l4proto tcp redirect to :@TRANS_PORT@
+    }
+    chain guard_output {
+        type filter hook output priority filter; policy drop;
+        oifname "lo" accept
+        # OUTPUT NAT may retain the original oif until the output hooks finish.
+        # Match the translated endpoint and DNAT status, not a broad connection state.
+        ip daddr 127.0.0.1 ct status dnat tcp dport @TRANS_PORT@ accept
+        ip daddr 127.0.0.1 ct status dnat udp dport @DNS_PORT@ accept
+        meta nfproto ipv4 meta skuid @TOR_UID@ meta l4proto tcp accept
+        meta nfproto ipv4 udp sport 68 udp dport 67 ip daddr { 255.255.255.255, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 } accept
+    }
+    chain guard_forward {
+        type filter hook forward priority filter; policy drop;
+    }
+}

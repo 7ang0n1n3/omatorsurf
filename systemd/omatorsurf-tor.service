@@ -1,0 +1,32 @@
+[Unit]
+Description=Application-managed Tor for omatorsurf
+After=network.target
+
+[Service]
+Type=simple
+User=tor
+Group=tor
+StateDirectory=omatorsurf/tor
+StateDirectoryMode=0700
+ExecStartPre=/usr/bin/tor --defaults-torrc /dev/null -f /etc/omatorsurf/torrc --verify-config
+ExecStart=/usr/bin/tor --defaults-torrc /dev/null -f /etc/omatorsurf/torrc
+KillSignal=SIGINT
+TimeoutStartSec=30
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

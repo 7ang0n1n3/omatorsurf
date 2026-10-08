@@ -4,7 +4,7 @@
 
 Rust CLI backend for system-wide Tor routing on Arch Linux/Omarchy. The backend manages Tor, nftables and systemd through a command-line interface. Once enabled, the kernel routing rules cover applications, browsers and background services on the host, including applications launched outside the terminal.
 
-Tor routes supported TCP traffic and DNS requests. This build blocks other outbound IP traffic according to the protection policy below. It provides a CLI backend; no desktop GUI or privileged IPC daemon is included.
+Tor routes supported TCP traffic and DNS requests. This build blocks other outbound IP traffic according to the protection policy below. An optional [Quickshell plugin](quickshell-plugin/README.md) provides native Omarchy taskbar controls with live theme bindings. The CLI backend can be installed independently.
 
 ## Requirements
 
@@ -91,7 +91,7 @@ pkexec /usr/local/bin/omatorsurf new-circuit
 pkexec /usr/local/bin/omatorsurf stop
 ```
 
-Full status/check require root because nftables inspection needs privileges. The application never launches an internal privilege prompt. Unattended GUI access would require a future privileged service with authenticated IPC.
+Full status/check require root because nftables inspection needs privileges. The CLI never launches an internal privilege prompt. The optional bar plugin reads timestamped observations from a root-owned status publisher and uses pkexec for explicit changes.
 
 | Command | Behavior |
 | --- | --- |
@@ -109,6 +109,23 @@ Status reports `protected` only when the complete rules, Tor readiness and a fre
 `start` installs the kill switch before starting Tor, checks bootstrap/listeners, DNS rules, and a fresh HTTPS response from Tor Project's IP API. Repeated start replaces the owned table atomically. Startup failure leaves any installed guard in place; retry `start` to recover or explicitly `stop` to restore direct networking. Failed Tor shutdown retains the guard. `stop` affects only application Tor and `inet omatorsurf`; repeated stop is safe.
 
 `new-circuit` uses installed Python Stem with cookie authentication and Tor's NEWNYM signal. Future connections can use new circuits; existing streams remain open and a different exit IP is not guaranteed. [Stem documentation](https://stem.torproject.org/api/control.html) describes these semantics.
+
+## Omarchy taskbar plugin
+
+**Plugin version: 1.0.2.** After installing the backend, run as your regular desktop user:
+
+```bash
+./quickshell-plugin/install.sh
+```
+
+The installer invokes pkexec for the root status publisher, backs up your shell layout, and enables the native Omarchy bar widget. It does not start Tor routing.
+
+- The bar shows one Nerd Font icon: U+F199A when off, U+F0CCC when verified protected.
+- Clicking it opens a popup with Start/Stop, current public IPv4, status details and New Circuit.
+- Start/Stop enables routing or restores direct networking through pkexec.
+- New Circuit requests future Tor circuits through pkexec; the exit IP may stay the same.
+
+Colors, typography, spacing, borders, rounding and popup behavior use the active Omarchy shell theme and shared UI components. Stale or failed observations display Unknown. See the [plugin documentation](quickshell-plugin/README.md) for installation, privilege design, settings and removal. The widget's bar rendering and read-only status publisher have been confirmed in the live desktop; privileged button interactions remain untested.
 
 ## Protection policy
 
@@ -152,6 +169,12 @@ pkexec /usr/local/bin/omatorsurf stop
 Manual CLI start does **not** persist protection through reboot. Optional service startup has been tested on the running host; actual reboot, suspend/resume, initramfs networking and network-manager-specific boot ordering still need VM/hardware validation. Do not assume protection before the early guard has successfully installed. Boot startup is opt-in; installation does not change existing service enablement.
 
 ## Uninstall
+
+If you installed the bar plugin, remove it first as your regular desktop user. This removes its status publisher and preserves current routing:
+
+```bash
+./quickshell-plugin/uninstall.sh
+```
 
 Run from the checkout:
 
@@ -230,7 +253,8 @@ omatorsurf/
 ├── config/                   Configuration, Tor template and JSON schema
 ├── nftables/                 Routing template and runtime verification rules
 ├── systemd/                  Application service units
-└── scripts/                  Install, uninstall and Tor circuit helper
+├── scripts/                  Install, uninstall and Tor circuit helper
+└── quickshell-plugin/        Omarchy bar widget, status bridge and its installers
 ```
 
 Licensed under the MIT license; see [LICENSE](LICENSE).

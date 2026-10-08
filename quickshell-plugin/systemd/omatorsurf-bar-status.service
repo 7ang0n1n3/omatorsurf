@@ -1,0 +1,20 @@
+# Omatorsurf bar integration
+[Unit]
+Description=Observe Omatorsurf protection for the Omarchy bar
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/omatorsurf-bar observe
+TimeoutStartSec=180
+RuntimeDirectory=omatorsurf-bar
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+UMask=0022
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/run/omatorsurf-bar
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK

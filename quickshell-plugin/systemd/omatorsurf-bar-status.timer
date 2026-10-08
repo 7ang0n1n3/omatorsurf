@@ -1,0 +1,12 @@
+# Omatorsurf bar integration
+[Unit]
+Description=Refresh the Omatorsurf bar status
+
+[Timer]
+OnBootSec=5s
+OnUnitInactiveSec=15s
+AccuracySec=1s
+Unit=omatorsurf-bar-status.service
+
+[Install]
+WantedBy=timers.target

@@ -1,6 +1,6 @@
 # CLI API v1
 
-Use `pkexec /usr/local/bin/omatorsurf status --json` for a single live observation. Successful stdout contains exactly one JSON object followed by a newline. Diagnostics go to stderr. Consumers must handle nonzero exit and empty stdout as an unavailable observation, never as proof of protection. Unattended GUI polling requires a future privileged service with authenticated IPC; repeated interactive pkexec prompts are unsuitable for that use.
+Use `pkexec /usr/local/bin/omatorsurf status --json` for a single live observation. Successful stdout contains exactly one JSON object followed by a newline. Diagnostics go to stderr. Consumers must handle nonzero exit and empty stdout as an unavailable observation, never as proof of protection. The optional [Omarchy bar integration](quickshell-plugin/README.md) supplies a root-owned observation publisher for unattended GUI reads; interactive pkexec is reserved for changes.
 
 | Field | Type | Meaning |
 | --- | --- | --- |

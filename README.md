@@ -4,13 +4,14 @@
 
 Rust CLI backend for system-wide Tor routing on Arch Linux/Omarchy. The backend manages Tor, nftables and systemd through a command-line interface. Once enabled, the kernel routing rules cover applications, browsers and background services on the host, including applications launched outside the terminal.
 
-Tor routes supported TCP traffic and DNS requests. This build blocks other outbound IP traffic according to the protection policy below. An optional [Quickshell plugin](quickshell-plugin/README.md) provides native Omarchy taskbar controls with live theme bindings. The CLI backend can be installed independently.
+Tor routes supported TCP traffic and DNS requests. This build blocks other outbound IP traffic according to the protection policy below. The [Quickshell plugin](quickshell-plugin/README.md) provides native Omarchy taskbar controls with live theme bindings. The main installer installs both the backend and plugin by default; `--backend-only` installs the CLI independently.
 
 ## Requirements
 
 - Arch Linux or Omarchy with systemd.
 - Tor, nftables, iproute2 (`ss`), curl, Python and python-stem.
 - `pkexec` and working polkit authentication for privileged operations.
+- For the default full install: Omarchy with its Quickshell shell running, the `omarchy` and `omarchy-shell` commands, and a graphical polkit agent. Run the scripts from that desktop user's session.
 - Standard Bash, coreutils and util-linux tools, including `runuser` for automatic builds and `flock` for uninstall locking.
 - Rust 1.89 or newer and Cargo when a release needs building; Git for cloning/updating the repository.
 
@@ -22,28 +23,43 @@ pkexec /usr/bin/pacman -S --needed tor nftables iproute2 curl python-stem
 
 ## Install
 
-Clone as your regular user, then launch the installer through pkexec:
+Clone and run the installer as your regular desktop user:
 
 ```bash
 git clone https://github.com/7ang0n1n3/omatorsurf.git
 cd omatorsurf
-pkexec "$(pwd)/scripts/install.sh"
+./scripts/install.sh
 ```
+
+This installs the backend, the Quickshell bar plugin, and its root status publisher. The script invokes pkexec for privileged stages; do not wrap the full installer in pkexec or sudo. Authentication may be requested for each system stage. Runtime packages must already be installed.
 
 ### Installer behavior
 
+- Checks that the Omarchy shell is reachable, installs the backend first, then installs/enables the plugin for the current desktop user.
 - The default binary is `target/release/omatorsurf` inside the checkout.
 - If that binary is missing, the installer runs `cargo build --locked --release --target-dir <checkout>/target` as the user who invoked pkexec, then installs it with root privileges. Cargo and build scripts are never run as root.
 - An existing executable release is reused. Installation does not rebuild it when source files change.
 - An existing default release that is not executable is reported as an error. A missing or non-executable custom binary also fails without an automatic build.
 - Existing `/etc/omatorsurf/config.toml` is preserved. Its configuration determines the generated Tor configuration. Differing installed Tor configuration or unit files cause installation to stop before deployment files are written; back them up and review the differences before replacement.
-- Installation does not start/enable services or apply firewall rules. Start routing explicitly afterward.
+- Backs up the existing plugin and `shell.json`, copies the plugin into `~/.config/omarchy/plugins/io.github.7ang0n1n3.omatorsurf/`, waits for discovery, and enables the bar widget. Backups go under `~/.local/state/omatorsurf/plugin-backups/` (`XDG_STATE_HOME` is honored).
+- Enables/starts `omatorsurf-bar-status.timer` for read-only status observations. Installation does not start/enable Tor routing or apply firewall rules. Use the widget's Start button or `pkexec /usr/local/bin/omatorsurf start` afterward.
+- If plugin installation fails after backend installation, the backend remains installed. Resolve the reported error and rerun the installer.
 
 To install another existing executable:
 
 ```bash
-pkexec "$(pwd)/scripts/install.sh" --binary /absolute/path/to/omatorsurf
+./scripts/install.sh --binary /absolute/path/to/omatorsurf
 ```
+
+For a backend-only installation on Arch Linux without the Omarchy desktop, use:
+
+```bash
+./scripts/install.sh --backend-only
+# Or explicitly invoke the system-only stage:
+pkexec "$(pwd)/scripts/install.sh" --backend-only
+```
+
+`--backend-only` can also be combined with `--binary PATH`. It skips all plugin/status-publisher installation and does not start or enable services.
 
 View installer help without root:
 
@@ -63,6 +79,11 @@ View installer help without root:
 | `/etc/systemd/system/omatorsurf-guard.service` | Early network guard unit |
 | `/etc/systemd/system/omatorsurf-tor.service` | Dedicated application Tor unit |
 | `/run/omatorsurf/` | Runtime state and transaction lock |
+| `~/.config/omarchy/plugins/io.github.7ang0n1n3.omatorsurf/` | Quickshell widget and manifest for the invoking desktop user |
+| `/usr/local/libexec/omatorsurf-bar` | Root-owned status publisher and authenticated plugin action helper |
+| `/etc/systemd/system/omatorsurf-bar-status.service` | Read-only status observation service |
+| `/etc/systemd/system/omatorsurf-bar-status.timer` | Enabled periodic status publisher |
+| `/run/omatorsurf-bar/` | Published status and helper lock |
 
 The dedicated Tor service creates its private state under `/var/lib/omatorsurf/tor`. Keep the checkout if you want to use its install/uninstall scripts later; these scripts are not copied into `/usr/local/bin`.
 
@@ -73,11 +94,11 @@ From the checkout, update the source and explicitly rebuild an existing release 
 ```bash
 git pull --ff-only
 cargo build --locked --release --target-dir "$(pwd)/target"
-pkexec "$(pwd)/scripts/install.sh"
+./scripts/install.sh
 omatorsurf version
 ```
 
-To build manually before a first installation, use the same Cargo command. Rust dependencies may need network access unless they are already cached. The installer also refuses automatic compilation when it cannot identify a non-root build account.
+The installer updates both backend and plugin. Use `--backend-only` when updating a standalone backend. To build manually before a first installation, use the same Cargo command. Rust dependencies may need network access unless they are already cached. The installer also refuses automatic compilation when it cannot identify a non-root build account.
 
 ## Use
 
@@ -112,7 +133,7 @@ Status reports `protected` only when the complete rules, Tor readiness and a fre
 
 ## Omarchy taskbar plugin
 
-**Plugin version: 1.0.2.** After installing the backend, run as your regular desktop user:
+**Plugin version: 1.0.2.** The main installer includes the plugin. To install or update only the plugin against an already installed backend, run as your regular desktop user:
 
 ```bash
 ./quickshell-plugin/install.sh
@@ -166,28 +187,25 @@ pkexec /usr/bin/systemctl disable --now omatorsurf.service
 pkexec /usr/local/bin/omatorsurf stop
 ```
 
-Manual CLI start does **not** persist protection through reboot. Optional service startup has been tested on the running host; actual reboot, suspend/resume, initramfs networking and network-manager-specific boot ordering still need VM/hardware validation. Do not assume protection before the early guard has successfully installed. Boot startup is opt-in; installation does not change existing service enablement.
+Manual CLI start does **not** persist protection through reboot. Optional service startup has been tested on the running host; actual reboot, suspend/resume, initramfs networking and network-manager-specific boot ordering still need VM/hardware validation. Do not assume protection before the early guard has successfully installed. Routing at boot is opt-in; installation does not change existing routing service enablement. The full installer enables the plugin's read-only status timer.
 
 ## Uninstall
 
-If you installed the bar plugin, remove it first as your regular desktop user. This removes its status publisher and preserves current routing:
+Run from the checkout as the desktop user who installed the plugin:
 
 ```bash
-./quickshell-plugin/uninstall.sh
-```
-
-Run from the checkout:
-
-```bash
-pkexec "$(pwd)/scripts/uninstall.sh"
+./scripts/uninstall.sh
 ```
 
 The uninstaller:
 
-1. Checks ownership of `inet omatorsurf` and refuses to remove an unrecognized table.
-2. Stops/disables the three application units and obtains the transaction lock.
-3. Removes only the owned application firewall table and confirms removal.
-4. Removes installed unit files, reloads systemd, and removes the installed binary, template and `state.json`.
+1. Backs up the shell layout, disables the widget, removes its status timer/service/helper through pkexec, and moves the user plugin into its backup directory. If no user plugin exists, it still removes any status publisher from a partial installation.
+2. Invokes the privileged backend cleanup, checks ownership of `inet omatorsurf`, and refuses to remove an unrecognized table.
+3. Stops/disables the three application units and obtains the transaction lock.
+4. Removes only the owned application firewall table and confirms removal.
+5. Removes installed unit files, reloads systemd, and removes the installed binary, template and `state.json`.
+
+Do not wrap the full uninstaller in pkexec or sudo. It removes the plugin for the invoking user; plugin copies in other users' accounts are preserved. Wait for active plugin actions and close pending authentication prompts before removal. A plugin cleanup failure stops before backend removal; if backend cleanup fails after the plugin is removed, resolve the error and rerun the script.
 
 Removing the application guard permits direct networking again, subject to any unrelated firewall rules. Resolver files need no restoration because the application never rewrites them. The uninstaller does not require a working application binary or configuration. Service/firewall cleanup failure stops removal of installed files; a busy transaction lock requires retrying after the other operation finishes.
 
@@ -195,6 +213,8 @@ Removing the application guard permits direct networking again, subject to any u
 | --- | --- | --- |
 | Application binary, template and units | Removed | Removed |
 | Application firewall table and `state.json` | Removed | Removed |
+| User plugin, status helper and status units | Removed | Removed |
+| Plugin/layout backups | Preserved | Preserved |
 | `/etc/omatorsurf` configuration | Preserved | Deleted |
 | `/var/lib/omatorsurf` Tor data | Preserved | Deleted |
 | Dependency packages, checkout and unrelated services/tables | Preserved | Preserved |
@@ -202,8 +222,10 @@ Removing the application guard permits direct networking again, subject to any u
 To also delete application configuration and persistent Tor data:
 
 ```bash
-pkexec "$(pwd)/scripts/uninstall.sh" --purge
+./scripts/uninstall.sh --purge
 ```
+
+To remove only a standalone backend, use `./scripts/uninstall.sh --backend-only` (or `pkexec "$(pwd)/scripts/uninstall.sh" --backend-only`). Combine with `--purge` if needed. This option leaves any installed plugin and status publisher in place; use the default full uninstall for a combined installation.
 
 The runtime lock is deliberately retained under `/run/omatorsurf` until reboot to avoid unlinking a lock held during cleanup. Other files in `/usr/share/omatorsurf` are preserved if present; custom systemd drop-in directories are not deleted by the script.
 

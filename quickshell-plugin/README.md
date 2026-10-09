@@ -9,14 +9,14 @@ cannot install this subdirectory from the main Omatorsurf repository.
 
 ## Install
 
-First install the backend from the repository root:
+Install the backend and plugin together from the repository root, as your regular desktop user:
 
 ```bash
-pkexec "$(pwd)/scripts/install.sh"
-./quickshell-plugin/install.sh
+./scripts/install.sh
 ```
 
-Run the plugin installer as your regular desktop user. Its system stage uses
+To install or update only the plugin after installing the backend, run
+`./quickshell-plugin/install.sh` as your regular desktop user. Its system stage uses
 `pkexec`, installs a root-owned helper and status timer, then the user stage copies
 the QML/manifest into `~/.config/omarchy/plugins/io.github.7ang0n1n3.omatorsurf/`,
 backs up `shell.json`, waits for asynchronous discovery to complete, and enables
@@ -27,8 +27,8 @@ plugin; no shell restart is needed. Neither installer enables Tor routing.
 Requires the installed Omarchy shell (`qs.Commons`, `qs.Ui`, plugin manifest
 schema 1), a working graphical polkit agent, Python 3, curl, systemd and coreutils.
 It is not a standalone Quickshell configuration or a Waybar module. The main
-backend installer remains independent: rerun this plugin installer to update the
-plugin/helper. User backups are stored under
+installer supports `--backend-only` for standalone CLI installations; its default
+also updates the plugin/helper. User backups are stored under
 `~/.local/state/omatorsurf/plugin-backups/` (`XDG_STATE_HOME` is honored). The
 installed Omarchy registry uses `~/.config/omarchy` for plugins and layout.
 
@@ -120,11 +120,15 @@ status timer/service/helper, and moves the installed QML into the user backup.
 It preserves the backend, configuration, Tor data, and current network routing.
 Wait for active actions and close pending authentication prompts before removal.
 
-For a complete application uninstall, remove the plugin first, then run:
+For a complete application uninstall, run as your regular desktop user:
 
 ```bash
-pkexec "$(pwd)/scripts/uninstall.sh"
+./scripts/uninstall.sh
 ```
+
+The main uninstaller removes the plugin/status publisher first, then restores
+direct networking and removes the backend. Add `--purge` to also delete backend
+configuration and persistent Tor data; plugin/layout backups remain preserved.
 
 ## Troubleshooting
 

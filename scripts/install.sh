@@ -3,24 +3,54 @@ set -euo pipefail
 project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 binary="$project_dir/target/release/omatorsurf"
 custom_binary=false
-if [[ ${1:-} == --help ]]; then
-    printf '%s\n' "Usage: pkexec $project_dir/scripts/install.sh [--binary PATH]" \
-        'Builds a missing default release as the invoking user, then installs it.' \
+backend_only=false
+usage() {
+    printf '%s\n' "Usage: $project_dir/scripts/install.sh [--backend-only] [--binary PATH]" \
+        'Run as your desktop user to install the backend and Quickshell plugin.' \
+        'Uses pkexec for system installation; enables the bar status publisher.' \
+        '--backend-only installs just the CLI backend and may be run through pkexec.' \
+        'Builds a missing default release as the invoking user.' \
         'An existing release is reused; --binary requires an existing executable.' \
-        'No services are started or enabled; no firewall rules are applied.'
+        'Tor routing is not started or enabled; no firewall rules are applied.'
+}
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --help|-h) usage; exit 0 ;;
+        --backend-only) backend_only=true; shift ;;
+        --binary)
+            [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { usage >&2; exit 1; }
+            binary="$2"
+            [[ "$binary" == /* ]] || binary="$PWD/$binary"
+            custom_binary=true
+            shift 2 ;;
+        *) usage >&2; exit 1 ;;
+    esac
+done
+if [[ "$backend_only" == false ]]; then
+    [[ $EUID != 0 ]] || {
+        printf '%s\n' "Run $project_dir/scripts/install.sh as your regular desktop user, without pkexec, so the plugin uses your desktop session. Use --backend-only for a root-only install." >&2
+        exit 1
+    }
+    for dependency in pkexec omarchy omarchy-shell python3 install; do
+        command -v "$dependency" >/dev/null || { printf 'Missing dependency: %s\n' "$dependency" >&2; exit 1; }
+    done
+    # Confirm the desktop shell is reachable before installing system files.
+    omarchy-shell shell listPlugins >/dev/null
+    backend_args=(--backend-only)
+    [[ "$custom_binary" == false ]] || backend_args+=(--binary "$binary")
+    pkexec "$project_dir/scripts/install.sh" "${backend_args[@]}"
+    "$project_dir/quickshell-plugin/install.sh" || {
+        printf '%s\n' 'Backend installed, but plugin installation failed. Resolve the error and rerun this installer.' >&2
+        exit 1
+    }
+    printf '%s\n' 'Backend and Quickshell plugin installed. Use the widget Start button or pkexec /usr/local/bin/omatorsurf start to enable routing.'
     exit 0
 fi
-if [[ $# -gt 0 ]]; then
-    if [[ $# != 2 || $1 != --binary ]]; then
-        printf '%s\n' "Usage: pkexec $project_dir/scripts/install.sh [--binary PATH]" >&2
-        exit 1
-    fi
-    binary="$2"
-    custom_binary=true
-fi
 if [[ $EUID != 0 ]]; then
-    printf '%s\n' "Run this installer as root: pkexec $project_dir/scripts/install.sh" >&2
-    exit 1
+    command -v pkexec >/dev/null || { printf '%s\n' 'Missing dependency: pkexec' >&2; exit 1; }
+    backend_args=(--backend-only)
+    [[ "$custom_binary" == false ]] || backend_args+=(--binary "$binary")
+    exec pkexec "$project_dir/scripts/install.sh" "${backend_args[@]}"
 fi
 for dependency in tor nft systemctl journalctl ss install cmp mktemp getent curl timeout python3; do
     if ! command -v "$dependency" >/dev/null; then

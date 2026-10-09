@@ -4,21 +4,52 @@ set -euo pipefail
 umask 077
 
 script_path="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/uninstall.sh"
+project_dir="$(cd -- "$(dirname -- "$script_path")/.." && pwd)"
 purge=false
+backend_only=false
 usage() {
-    printf '%s\n' "Usage: pkexec $script_path [--purge]" \
-        'Restores direct networking and removes installed omatorsurf files.' \
+    printf '%s\n' "Usage: $script_path [--backend-only] [--purge]" \
+        'Run as your desktop user to remove the Quickshell plugin and backend.' \
+        'Uses pkexec for system cleanup and restores direct networking.' \
+        '--backend-only removes just the CLI backend and may be run through pkexec.' \
         'Configuration and Tor data are preserved by default.' \
         '--purge also deletes /etc/omatorsurf and /var/lib/omatorsurf.'
 }
-case "${1:-}" in
-    --help|-h) usage; exit 0 ;;
-    --purge) purge=true ;;
-    '') ;;
-    *) usage >&2; exit 1 ;;
-esac
-[[ $# -le 1 ]] || { usage >&2; exit 1; }
-[[ $EUID == 0 ]] || { printf '%s\n' "Run: pkexec $script_path" >&2; exit 1; }
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --help|-h) usage; exit 0 ;;
+        --purge) purge=true; shift ;;
+        --backend-only) backend_only=true; shift ;;
+        *) usage >&2; exit 1 ;;
+    esac
+done
+backend_args=(--backend-only)
+[[ "$purge" == false ]] || backend_args+=(--purge)
+if [[ "$backend_only" == false ]]; then
+    [[ $EUID != 0 ]] || {
+        printf '%s\n' "Run $script_path as your regular desktop user, without pkexec, so the plugin is removed from your account. Use --backend-only for root-only cleanup." >&2
+        exit 1
+    }
+    command -v pkexec >/dev/null || { printf '%s\n' 'Missing dependency: pkexec' >&2; exit 1; }
+    plugin_destination="$HOME/.config/omarchy/plugins/io.github.7ang0n1n3.omatorsurf"
+    if [[ -e "$plugin_destination" || -L "$plugin_destination" ]]; then
+        "$project_dir/quickshell-plugin/uninstall.sh"
+    else
+        # A backend-only or partial installation may have no user widget.
+        # Still remove any status publisher before deleting its backend.
+        pkexec "$project_dir/quickshell-plugin/scripts/install-system.sh" --uninstall
+    fi
+    pkexec "$script_path" "${backend_args[@]}" || {
+        printf '%s\n' 'Plugin/status publisher removed, but backend cleanup failed. Resolve the error and rerun this uninstaller.' >&2
+        exit 1
+    }
+    printf '%s\n' 'Backend and Quickshell plugin uninstalled for this user. Plugin backups were preserved.'
+    exit 0
+fi
+if [[ $EUID != 0 ]]; then
+    command -v pkexec >/dev/null || { printf '%s\n' 'Missing dependency: pkexec' >&2; exit 1; }
+    exec pkexec "$script_path" "${backend_args[@]}"
+fi
 
 for dependency in systemctl nft python3 flock stat rm rmdir; do
     command -v "$dependency" >/dev/null || {

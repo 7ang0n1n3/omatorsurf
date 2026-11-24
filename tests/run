@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Portable checks only: does not install software or modify routing.
+set -euo pipefail
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
+python3 - <<'CHECK'
+import ast
+import json
+from pathlib import Path
+root = Path.cwd()
+manifest = json.loads((root / "manifest.json").read_text())
+local = json.loads((root / "quickshell-plugin/manifest.json").read_text())
+assert manifest["entryPoints"] == {"barWidget": "quickshell-plugin/BarWidget.qml"}
+assert local["entryPoints"] == {"barWidget": "BarWidget.qml"}
+assert {k:v for k,v in manifest.items() if k != "entryPoints"} == {k:v for k,v in local.items() if k != "entryPoints"}, "Manifest metadata drift"
+assert (root / manifest["entryPoints"]["barWidget"]).is_file()
+for path in [*root.glob("scripts/*.py"), *root.glob("quickshell-plugin/scripts/*.py")]:
+    ast.parse(path.read_text(), filename=str(path))
+print("Manifest layout/metadata and Python syntax checks passed")
+CHECK
+bash -n scripts/install.sh scripts/uninstall.sh quickshell-plugin/install.sh quickshell-plugin/uninstall.sh quickshell-plugin/scripts/install-system.sh
+cargo test --locked

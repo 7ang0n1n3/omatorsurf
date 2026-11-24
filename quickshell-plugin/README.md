@@ -3,9 +3,10 @@
 **Plugin version: 1.0.2** · MIT · Omatorsurf backend 1.0.0 or newer.
 
 Native Quickshell plugin for the current Omarchy shell plugin framework. The
-manifest is at this directory's root. Install locally using the script below;
-`omarchy plugin add` expects a standalone repository with a root manifest and
-cannot install this subdirectory from the main Omatorsurf repository.
+repository-root manifest points to this directory's QML entry point. The local
+installer uses this directory's manifest for its flat installed layout; both
+identify the same plugin. Use the manual installation below: cloning the plugin
+through the marketplace alone does not install the required backend or publisher.
 
 ## Install
 

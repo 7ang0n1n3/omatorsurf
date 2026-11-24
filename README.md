@@ -6,6 +6,19 @@ Rust CLI backend for system-wide Tor routing on Arch Linux/Omarchy. The backend 
 
 Tor routes supported TCP traffic and DNS requests. This build blocks other outbound IP traffic according to the protection policy below. The [Quickshell plugin](quickshell-plugin/README.md) provides native Omarchy taskbar controls with live theme bindings. The main installer installs both the backend and plugin by default; `--backend-only` installs the CLI independently.
 
+## Marketplace plugin
+
+Plugin **1.0.2**, ID `io.github.7ang0n1n3.omatorsurf`, is exposed by the
+[root manifest](manifest.json). The backend has its own version, **1.0.0**.
+The root entry point uses the existing `quickshell-plugin/` sources.
+This plugin requires manual setup of the native backend and root status publisher;
+`omarchy plugin add` alone is insufficient. Use the installer below.
+
+[Submission files and remaining checks](submission/README.md) ·
+[Security and capabilities](SECURITY.md) · [Dependency notices](THIRD_PARTY_NOTICES.md) ·
+[Release notes](CHANGELOG.md). Report ordinary bugs through
+[GitHub issues](https://github.com/7ang0n1n3/omatorsurf/issues).
+
 ## Requirements
 
 - Arch Linux or Omarchy with systemd.
@@ -148,6 +161,22 @@ The installer invokes pkexec for the root status publisher, backs up your shell 
 
 Colors, typography, spacing, borders, rounding and popup behavior use the active Omarchy shell theme and shared UI components. Stale or failed observations display Unknown. See the [plugin documentation](quickshell-plugin/README.md) for installation, privilege design, settings and removal. The widget's bar rendering and read-only status publisher have been confirmed in the live desktop; privileged button interactions remain untested.
 
+## Update
+
+From your existing checkout, review upstream changes, then rebuild before reinstalling:
+
+```bash
+git pull --ff-only
+cargo build --locked --release
+./scripts/install.sh
+```
+
+Rebuilding is necessary because the installer reuses an existing executable.
+For widget-only changes with an unchanged installed backend, use
+`./quickshell-plugin/install.sh`. Review any configuration or unit conflict the
+installer reports before replacing files. Installation preserves existing backend
+configuration and backs up the user plugin and shell layout.
+
 ## Protection policy
 
 - IPv4 TCP is transparently redirected to Tor; Tor's dedicated non-root UID alone bypasses redirection for its own IPv4 TCP.
@@ -190,6 +219,12 @@ pkexec /usr/local/bin/omatorsurf stop
 Manual CLI start does **not** persist protection through reboot. Optional service startup has been tested on the running host; actual reboot, suspend/resume, initramfs networking and network-manager-specific boot ordering still need VM/hardware validation. Do not assume protection before the early guard has successfully installed. Routing at boot is opt-in; installation does not change existing routing service enablement. The full installer enables the plugin's read-only status timer.
 
 ## Uninstall
+
+Use the full uninstaller below for this manual setup. The standard
+`omarchy plugin remove io.github.7ang0n1n3.omatorsurf` command removes only the
+shell plugin registration/files; it does not remove the root publisher, backend,
+or active routing. Prefer the supplied uninstallers to complete that cleanup.
+
 
 Run from the checkout as the desktop user who installed the plugin:
 

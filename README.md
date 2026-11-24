@@ -1,6 +1,6 @@
 # omatorsurf
 
-**Version: 1.0.0** — MIT licensed. The package version is defined in [Cargo.toml](Cargo.toml); check your installed binary with `omatorsurf version` or `omatorsurf --version`.
+**Backend version: 1.0.0 · Plugin version: 1.0.2** — MIT licensed. The package version is defined in [Cargo.toml](Cargo.toml); check your installed binary with `omatorsurf version` or `omatorsurf --version`.
 
 Rust CLI backend for system-wide Tor routing on Arch Linux/Omarchy. The backend manages Tor, nftables and systemd through a command-line interface. Once enabled, the kernel routing rules cover applications, browsers and background services on the host, including applications launched outside the terminal.
 
@@ -13,6 +13,8 @@ Plugin **1.0.2**, ID `io.github.7ang0n1n3.omatorsurf`, is exposed by the
 The root entry point uses the existing `quickshell-plugin/` sources.
 This plugin requires manual setup of the native backend and root status publisher;
 `omarchy plugin add` alone is insufficient. Use the installer below.
+The repository contains submission preparation files; this is not a claim of
+marketplace approval or publication.
 
 [Submission files and remaining checks](submission/README.md) ·
 [Security and capabilities](SECURITY.md) · [Dependency notices](THIRD_PARTY_NOTICES.md) ·
@@ -36,7 +38,7 @@ pkexec /usr/bin/pacman -S --needed tor nftables iproute2 curl python-stem
 
 ## Install
 
-Clone and run the installer as your regular desktop user:
+Clone the repository, review the source and installer, then run it as your regular desktop user:
 
 ```bash
 git clone https://github.com/7ang0n1n3/omatorsurf.git
@@ -53,7 +55,7 @@ This installs the backend, the Quickshell bar plugin, and its root status publis
 - If that binary is missing, the installer runs `cargo build --locked --release --target-dir <checkout>/target` as the user who invoked pkexec, then installs it with root privileges. Cargo and build scripts are never run as root.
 - An existing executable release is reused. Installation does not rebuild it when source files change.
 - An existing default release that is not executable is reported as an error. A missing or non-executable custom binary also fails without an automatic build.
-- Existing `/etc/omatorsurf/config.toml` is preserved. Its configuration determines the generated Tor configuration. Differing installed Tor configuration or unit files cause installation to stop before deployment files are written; back them up and review the differences before replacement.
+- Existing `/etc/omatorsurf/config.toml` is preserved. Its configuration determines the generated Tor configuration. A differing installed `torrc` or any of the three backend systemd unit files causes the backend stage to stop before deploying system files; back them up and review the differences before replacement. The plugin stage replaces its helper and two status-publisher unit files without this conflict check.
 - Backs up the existing plugin and `shell.json`, copies the plugin into `~/.config/omarchy/plugins/io.github.7ang0n1n3.omatorsurf/`, waits for discovery, and enables the bar widget. Backups go under `~/.local/state/omatorsurf/plugin-backups/` (`XDG_STATE_HOME` is honored).
 - Enables/starts `omatorsurf-bar-status.timer` for read-only status observations. Installation does not start/enable Tor routing or apply firewall rules. Use the widget's Start button or `pkexec /usr/local/bin/omatorsurf start` afterward.
 - If plugin installation fails after backend installation, the backend remains installed. Resolve the reported error and rerun the installer.
@@ -111,7 +113,12 @@ cargo build --locked --release --target-dir "$(pwd)/target"
 omatorsurf version
 ```
 
-The installer updates both backend and plugin. Use `--backend-only` when updating a standalone backend. To build manually before a first installation, use the same Cargo command. Rust dependencies may need network access unless they are already cached. The installer also refuses automatic compilation when it cannot identify a non-root build account.
+The installer updates both backend and plugin. Use `--backend-only` when updating a standalone backend. To build manually before a first installation, use the same Cargo command. Rust dependencies may need network access unless they are already cached. The installer also refuses automatic compilation when it cannot identify a non-root build account. Its automatic build searches `~/.cargo/bin`, `/usr/local/bin`, `/usr/bin` and `/bin`; if your toolchain is available only through another version manager, build explicitly in your normal shell first.
+
+For widget-only changes with an unchanged installed backend, run
+`./quickshell-plugin/install.sh`. Review any backend configuration or unit conflict
+before replacing installed files. `git pull` follows the current branch; it does
+not pin installation to a marketplace-reviewed commit.
 
 ## Use
 
@@ -159,34 +166,25 @@ The installer invokes pkexec for the root status publisher, backs up your shell 
 - Start/Stop enables routing or restores direct networking through pkexec.
 - New Circuit requests future Tor circuits through pkexec; the exit IP may stay the same.
 
-Colors, typography, spacing, borders, rounding and popup behavior use the active Omarchy shell theme and shared UI components. Stale or failed observations display Unknown. See the [plugin documentation](quickshell-plugin/README.md) for installation, privilege design, settings and removal. The widget's bar rendering and read-only status publisher have been confirmed in the live desktop; privileged button interactions remain untested.
+Colors, typography, spacing, borders, rounding and popup behavior use the active Omarchy shell theme and shared UI components. Stale or failed observations display Unknown. See the [plugin documentation](quickshell-plugin/README.md) for installation, privilege design, settings and removal. Earlier project testing recorded live bar rendering and read-only status publication; privileged button interactions and the new repository-root entry-point layout still need live validation. See the [validation record](submission/VALIDATION.md) for the tested scope.
 
-## Update
-
-From your existing checkout, review upstream changes, then rebuild before reinstalling:
-
-```bash
-git pull --ff-only
-cargo build --locked --release
-./scripts/install.sh
-```
-
-Rebuilding is necessary because the installer reuses an existing executable.
-For widget-only changes with an unchanged installed backend, use
-`./quickshell-plugin/install.sh`. Review any configuration or unit conflict the
-installer reports before replacing files. Installation preserves existing backend
-configuration and backs up the user plugin and shell layout.
+The widget reads the local snapshot every two seconds. The root publisher is scheduled
+15 seconds after each completed observation; snapshots older than 90 seconds
+are shown as Unknown. This is an observation, not continuous proof of protection.
+While routing is disabled, the publisher queries Tor Project’s HTTPS IP API
+through the ordinary connection to show the public IPv4. It does not perform
+that direct lookup in the degraded state.
 
 ## Protection policy
 
-- IPv4 TCP is transparently redirected to Tor; Tor's dedicated non-root UID alone bypasses redirection for its own IPv4 TCP.
-- UDP DNS on port 53 redirects before loopback/private exclusions. Resolver files are never rewritten. Successful protected HTTPS requests exercise system name resolution.
-- Non-loopback IPv6, general UDP, forwarding and private/LAN TCP are blocked. Local IPv4 DHCP ports 68→67 are explicitly allowed. Loopback remains available. ARP is outside this IP firewall.
+- Eligible outbound IPv4 TCP is transparently redirected to Tor. Loopback remains local; private/reserved destinations are blocked except for Tor’s virtual-address range `10.192.0.0/10`, which is redirected. The dedicated `tor` UID can send IPv4 TCP directly to establish Tor connections.
+- IPv4 UDP DNS on port 53 redirects before loopback/private exclusions, except for traffic owned by the Tor UID. Resolver files are never rewritten. Successful protected HTTPS requests exercise system name resolution.
+- Non-loopback IPv6 and forwarding are blocked. General UDP and private/LAN TCP are blocked except for the rules described here. IPv4 DHCP from port 68 to port 67 is allowed to the broadcast, RFC 1918 private and link-local destination ranges. Loopback remains available. ARP is outside this IP firewall.
 - Existing direct connections receive no broad established/related exception. They are interrupted when protection starts.
 - Tor stops/fails, the CLI crashes, or an interface changes: kernel rules remain installed. Recovery depends on network/Tor availability and may require `start` again.
 - Privileged software and software running as the Tor account remain trusted. This backend does not conceal browser fingerprinting, application identifiers, or traffic before protection is enabled.
 
-Only the dedicated nftables table is changed. Unrelated tables can independently block connections. Status certifies the complete ordered application rules against native numeric nft output; unexpected formatting or changed rules conservatively remain unverified. No cached state can certify protection.
+Only the dedicated nftables table is changed. Unrelated tables can independently block connections. Status verifies the complete ordered application rules against native numeric nft output; unexpected formatting or changed rules conservatively remain unverified. The cached transaction state is not used to establish protection.
 
 ## Configuration
 
@@ -196,7 +194,7 @@ After port changes, render `omatorsurf --config PATH tor config`, review it, and
 
 `general.verify_connection=false` skips the extra initial route probe. Final health and status verification still require a fresh confirmed Tor route before reporting protection.
 
-The extra startup probe retries transient curl DNS/connect/timeout errors at most three times while retaining the guard. A response that does not confirm Tor fails immediately. Persistent external failure leaves protection installed and reports an error; bootstrap alone cannot certify Internet availability.
+The extra startup probe makes at most three attempts (two retries) for transient curl DNS/connect/timeout errors while retaining the guard. A response that does not confirm Tor fails immediately. Persistent external failure leaves protection installed and reports an error; bootstrap alone cannot certify Internet availability.
 
 `/run/omatorsurf/state.json` records transaction progress/errors atomically and is informational only. A kernel-backed lock serializes mutations and releases automatically on process death. Status always observes live state, even with a missing, malformed or stale state file.
 
@@ -216,7 +214,7 @@ pkexec /usr/bin/systemctl disable --now omatorsurf.service
 pkexec /usr/local/bin/omatorsurf stop
 ```
 
-Manual CLI start does **not** persist protection through reboot. Optional service startup has been tested on the running host; actual reboot, suspend/resume, initramfs networking and network-manager-specific boot ordering still need VM/hardware validation. Do not assume protection before the early guard has successfully installed. Routing at boot is opt-in; installation does not change existing routing service enablement. The full installer enables the plugin's read-only status timer.
+Manual CLI start does **not** persist protection through reboot. Earlier project testing recorded service startup on a running host; actual reboot, suspend/resume, initramfs networking and network-manager-specific boot ordering still need VM/hardware validation. Do not assume protection before the early guard has successfully installed. Routing at boot is opt-in; installation does not change existing routing service enablement. The full installer enables the plugin's read-only status timer.
 
 ## Uninstall
 
@@ -224,7 +222,6 @@ Use the full uninstaller below for this manual setup. The standard
 `omarchy plugin remove io.github.7ang0n1n3.omatorsurf` command removes only the
 shell plugin registration/files; it does not remove the root publisher, backend,
 or active routing. Prefer the supplied uninstallers to complete that cleanup.
-
 
 Run from the checkout as the desktop user who installed the plugin:
 
@@ -262,7 +259,7 @@ To also delete application configuration and persistent Tor data:
 
 To remove only a standalone backend, use `./scripts/uninstall.sh --backend-only` (or `pkexec "$(pwd)/scripts/uninstall.sh" --backend-only`). Combine with `--purge` if needed. This option leaves any installed plugin and status publisher in place; use the default full uninstall for a combined installation.
 
-The runtime lock is deliberately retained under `/run/omatorsurf` until reboot to avoid unlinking a lock held during cleanup. Other files in `/usr/share/omatorsurf` are preserved if present; custom systemd drop-in directories are not deleted by the script.
+The backend runtime lock is deliberately retained under `/run/omatorsurf` until reboot to avoid unlinking a lock held during cleanup. Other files in `/usr/share/omatorsurf` are preserved if present; custom systemd drop-in directories are not deleted by the script. The helper also retains its lock and disabled marker under `/run/omatorsurf-bar` until reboot; successful helper cleanup removes the status snapshot.
 
 View uninstall help without root:
 
@@ -305,7 +302,14 @@ pkexec /usr/bin/env RUST_LOG=debug /usr/local/bin/omatorsurf check
 omatorsurf/
 ├── Cargo.toml / Cargo.lock    Rust package and pinned dependencies
 ├── README.md / API.md        Deployment and API documentation
+├── manifest.json             Marketplace entry point and plugin metadata
 ├── LICENSE                   MIT license
+├── SECURITY.md               Capabilities and security reporting
+├── THIRD_PARTY_NOTICES.md     Dependency and licensing notes
+├── CHANGELOG.md               Release preparation notes
+├── submission/               Marketplace issue draft and validation record
+├── tests/run                 Portable packaging checks and backend tests
+├── .github/workflows/        CI checks
 ├── src/                      Application source
 ├── config/                   Configuration, Tor template and JSON schema
 ├── nftables/                 Routing template and runtime verification rules

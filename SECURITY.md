@@ -45,4 +45,4 @@ See README.md for exact commands, paths, retained files and failure behavior.
 A status observation can become stale. The kernel guard, not the widget, enforces
 routing policy. Privileged software and the Tor account are trusted. Reboot,
 suspend/resume, and privileged widget interactions require further validation as
-documented in submission/VALIDATION.md. No universal anonymity claim is made.
+documented in [validation and limitations](README.md#validation-and-limitations). No universal anonymity claim is made.

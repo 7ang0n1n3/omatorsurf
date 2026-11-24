@@ -13,10 +13,8 @@ Plugin **1.0.2**, ID `io.github.7ang0n1n3.omatorsurf`, is exposed by the
 The root entry point uses the existing `quickshell-plugin/` sources.
 This plugin requires manual setup of the native backend and root status publisher;
 `omarchy plugin add` alone is insufficient. Use the installer below.
-The repository contains submission preparation files; this is not a claim of
-marketplace approval or publication.
+Marketplace submission preparation does not establish approval or publication.
 
-[Submission files and remaining checks](submission/README.md) ·
 [Security and capabilities](SECURITY.md) · [Dependency notices](THIRD_PARTY_NOTICES.md) ·
 [Release notes](CHANGELOG.md). Report ordinary bugs through
 [GitHub issues](https://github.com/7ang0n1n3/omatorsurf/issues).
@@ -166,7 +164,7 @@ The installer invokes pkexec for the root status publisher, backs up your shell 
 - Start/Stop enables routing or restores direct networking through pkexec.
 - New Circuit requests future Tor circuits through pkexec; the exit IP may stay the same.
 
-Colors, typography, spacing, borders, rounding and popup behavior use the active Omarchy shell theme and shared UI components. Stale or failed observations display Unknown. See the [plugin documentation](quickshell-plugin/README.md) for installation, privilege design, settings and removal. Earlier project testing recorded live bar rendering and read-only status publication; privileged button interactions and the new repository-root entry-point layout still need live validation. See the [validation record](submission/VALIDATION.md) for the tested scope.
+Colors, typography, spacing, borders, rounding and popup behavior use the active Omarchy shell theme and shared UI components. Stale or failed observations display Unknown. See the [plugin documentation](quickshell-plugin/README.md) for installation, privilege design, settings and removal. Earlier project testing recorded live bar rendering and read-only status publication; privileged button interactions and the new repository-root entry-point layout still need live validation. See [Validation and limitations](#validation-and-limitations) for the tested scope.
 
 The widget reads the local snapshot every two seconds. The root publisher is scheduled
 15 seconds after each completed observation; snapshots older than 90 seconds
@@ -294,6 +292,24 @@ omatorsurf tor config
 pkexec /usr/bin/env RUST_LOG=debug /usr/local/bin/omatorsurf check
 ```
 
+## Validation and limitations
+
+During submission preparation, the installed Omarchy validator accepted the root
+manifest, portable packaging/syntax checks passed, and all 54 backend unit tests
+passed. These checks do not establish live compatibility or constitute a security
+audit. No exact host Omarchy source revision was recorded.
+
+Fresh install, upgrade and removal journeys on a disposable host, live loading
+through the repository-root entry point, privileged widget Start/Stop/NEWNYM,
+authentication cancellation/recovery, multi-monitor behavior, reboot and
+suspend/resume remain to be validated for this packaging candidate.
+
+The advisory security scan flagged the source-install instructions for building
+mutable upstream HEAD rather than a detached reviewed commit. That finding remains
+unresolved. Privileged operations, installers, source builds, package installation,
+service management and QML processes require review of the final committed source.
+No marketplace security approval or universal compatibility is claimed.
+
 ## API and project layout
 
 [API.md](API.md) documents JSON fields, degraded status, exit codes and frontend integration.
@@ -307,7 +323,6 @@ omatorsurf/
 ├── SECURITY.md               Capabilities and security reporting
 ├── THIRD_PARTY_NOTICES.md     Dependency and licensing notes
 ├── CHANGELOG.md               Release preparation notes
-├── submission/               Marketplace issue draft and validation record
 ├── tests/run                 Portable packaging checks and backend tests
 ├── .github/workflows/        CI checks
 ├── src/                      Application source

@@ -9,4 +9,4 @@
 The widget provides Start/Stop, public IPv4, observed protection details and
 NEWNYM controls. The backend remains version 1.0.0. These packaging changes do
 not claim new live-shell or privileged interaction testing. No tag or release
-has been published by this preparation; see submission/VALIDATION.md.
+has been published by this preparation; see [validation and limitations](README.md#validation-and-limitations).

@@ -18,4 +18,5 @@ for path in [*root.glob("scripts/*.py"), *root.glob("quickshell-plugin/scripts/*
 print("Manifest layout/metadata and Python syntax checks passed")
 CHECK
 bash -n scripts/install.sh scripts/uninstall.sh quickshell-plugin/install.sh quickshell-plugin/uninstall.sh quickshell-plugin/scripts/install-system.sh
+python3 -B -m unittest discover -s tests -p 'test_*.py'
 cargo test --locked

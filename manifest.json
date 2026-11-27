@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.7ang0n1n3.omatorsurf",
   "name": "Omatorsurf",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "author": "7ang0n1n3",
   "license": "MIT",
   "description": "Tor routing controls, current public IPv4 and verified protection status. Uses the active Omarchy theme and pkexec for changes.",

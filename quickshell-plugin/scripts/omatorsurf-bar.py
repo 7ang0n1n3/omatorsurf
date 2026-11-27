@@ -59,8 +59,8 @@ def read_snapshot():
     print(json.dumps(value, separators=(",", ":")))
 
 
-def publish(dfd, value):
-    name = f"status.{os.getpid()}.tmp"
+def publish(dfd, value, target="status.json"):
+    name = f"{target}.{os.getpid()}.tmp"
     fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                  0o644, dir_fd=dfd)
     try:
@@ -69,7 +69,7 @@ def publish(dfd, value):
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
-        os.rename(name, "status.json", src_dir_fd=dfd, dst_dir_fd=dfd)
+        os.rename(name, target, src_dir_fd=dfd, dst_dir_fd=dfd)
     finally:
         with contextlib.suppress(FileNotFoundError):
             os.unlink(name, dir_fd=dfd)
@@ -152,7 +152,57 @@ def unavailable(error, busy=""):
             "error": str(error)[-8192:], "ip_error": ""}
 
 
-def privileged(command):
+def timer_minutes(value):
+    if not isinstance(value, str) or not value.isascii() or not value.isdecimal():
+        raise ValueError("Timer interval must be a whole number of minutes (minimum 5)")
+    minutes = int(value)
+    if not 5 <= minutes <= 525600:
+        raise ValueError("Timer interval must be between 5 and 525600 minutes")
+    return minutes
+
+
+def load_timer(dfd):
+    try:
+        fd = os.open("timer.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dfd)
+    except FileNotFoundError:
+        return {"minutes": 0, "due": 0}
+    with os.fdopen(fd, "r") as stream:
+        trusted(os.fstat(stream.fileno()))
+        value = json.loads(stream.read(LIMIT))
+    if (type(value.get("minutes")) is not int
+            or value["minutes"] != 0 and not 5 <= value["minutes"] <= 525600
+            or type(value.get("due")) not in (int, float)
+            or not 0 <= value["due"] < float("inf")):
+        raise ValueError("Invalid circuit timer state")
+    return value
+
+
+def update_timer(dfd, timer, observation):
+    # Schedule against monotonic time: wall-clock adjustments cannot accelerate it.
+    if timer["minutes"]:
+        protected = observation.get("status") and observation["status"]["enabled"]
+        if not protected or not timer["due"]:
+            timer["due"] = time.monotonic() + timer["minutes"] * 60
+        elif time.monotonic() >= timer["due"]:
+            # Save before attempting NEWNYM so failures cannot cause rapid retries.
+            timer["due"] = time.monotonic() + timer["minutes"] * 60
+            publish(dfd, timer, "timer.json")
+            publish(dfd, unavailable("", busy="new-circuit"))
+            error = ""
+            try:
+                run([BINARY, "new-circuit"], 100)
+            except (RuntimeError, OSError) as failure:
+                error = str(failure)[-8192:]
+            observation = snapshot(error)
+        publish(dfd, timer, "timer.json")
+    observation["circuit_timer"] = {
+        "minutes": timer["minutes"],
+        "next_at": time.time() + max(0, timer["due"] - time.monotonic()) if timer["minutes"] else None,
+    }
+    return observation
+
+
+def privileged(command, minutes=None):
     if os.geteuid() != 0:
         raise RuntimeError("Use pkexec /usr/local/libexec/omatorsurf-bar " + command)
     os.umask(0o022)
@@ -182,6 +232,8 @@ def privileged(command):
                     os.close(marker)
                 with contextlib.suppress(FileNotFoundError):
                     os.unlink("status.json", dir_fd=dfd)
+                with contextlib.suppress(FileNotFoundError):
+                    os.unlink("timer.json", dir_fd=dfd)
                 return 0  # Keep the lock inode until reboot, including during updates.
             if command == "activate":
                 with contextlib.suppress(FileNotFoundError):
@@ -193,15 +245,22 @@ def privileged(command):
                 pass
             else:
                 raise RuntimeError("The bar integration was removed; reinstall it before running actions")
+            timer = load_timer(dfd)
+            if command == "timer":
+                timer = {"minutes": minutes, "due": time.monotonic() + minutes * 60 if minutes else 0}
+                publish(dfd, timer, "timer.json")
             error = ""
-            if command != "observe":
+            if command not in ("observe", "timer"):
                 publish(dfd, unavailable("", busy=command))
                 try:
                     run([BINARY, command], 900)
                 except (RuntimeError, OSError) as failure:
                     error = str(failure)[-8192:]
             try:
-                publish(dfd, snapshot(error))
+                if command in ("start", "stop", "new-circuit") and timer["minutes"]:
+                    timer["due"] = time.monotonic() + timer["minutes"] * 60
+                    publish(dfd, timer, "timer.json")
+                publish(dfd, update_timer(dfd, timer, snapshot(error)))
             except (RuntimeError, ValueError, OSError, KeyError) as failure:
                 publish(dfd, unavailable(error or failure))
                 if command == "observe":
@@ -212,8 +271,11 @@ def privileged(command):
 
 
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] == "timer":
+        minutes = 0 if sys.argv[2] == "off" else timer_minutes(sys.argv[2])
+        return privileged("timer", minutes)
     if len(sys.argv) != 2 or sys.argv[1] not in ("read", "observe", "start", "stop", "new-circuit", "activate", "cleanup"):
-        raise RuntimeError("Usage: omatorsurf-bar read|observe|start|stop|new-circuit|activate|cleanup")
+        raise RuntimeError("Usage: omatorsurf-bar read|observe|start|stop|new-circuit|activate|cleanup OR timer off|MINUTES")
     if sys.argv[1] == "read":
         read_snapshot()
         return 0

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui as Ui
 
 Ui.Panel {
@@ -56,19 +57,19 @@ Ui.Panel {
             Layout.fillWidth: true
             text: "Omatorsurf"
             textFormat: Text.PlainText
-            color: Color.popups.text
+            color: Commons.Color.popups.text
             font.family: Style.font.family
             font.pixelSize: Style.font.heading
           }
           Ui.Button {
             id: closeButton
             text: "Close"
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
             focusable: true
             onClicked: root.close()
           }
         }
-        Ui.PanelSectionHeader { text: "PROTECTION"; foreground: Color.popups.text }
+        Ui.PanelSectionHeader { text: "PROTECTION"; foreground: Commons.Color.popups.text }
         StatusRow { Layout.fillWidth: true; label: "Status"; value: backend.statusText }
         StatusRow { Layout.fillWidth: true; label: backend.protectedRoute ? "Tor exit IPv4" : "Public IPv4"; value: backend.publicIp }
         Repeater {
@@ -91,13 +92,13 @@ Ui.Panel {
           label: "Observation age"
           value: backend.observation ? Math.max(0, Math.floor(backend.age)) + "s" : "Unavailable"
         }
-        Ui.PanelSeparator { Layout.fillWidth: true; foreground: Color.popups.text }
+        Ui.PanelSeparator { Layout.fillWidth: true; foreground: Commons.Color.popups.text }
         Flow {
           Layout.fillWidth: true
           spacing: Style.spacing.controlGap
           Ui.Button {
             text: root.toggleText
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
             focusable: true
             bordered: true
             enabled: !backend.busy && backend.status !== null
@@ -106,7 +107,7 @@ Ui.Panel {
           }
           Ui.Button {
             text: "New circuit"
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
             focusable: true
             bordered: true
             enabled: backend.protectedRoute && !backend.busy
@@ -116,11 +117,48 @@ Ui.Panel {
           Ui.Button {
             visible: !backend.status && !backend.busy
             text: "Stop / restore network"
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
             focusable: true
             bordered: true
             tooltipText: "Explicitly remove the Omatorsurf guard even when status is unavailable"
             onClicked: backend.act("stop")
+          }
+        }
+        Ui.PanelSectionHeader { text: "AUTOMATIC NEW CIRCUIT"; foreground: Commons.Color.popups.text }
+        StatusRow { Layout.fillWidth: true; label: "Timer"; value: backend.timerText }
+        Flow {
+          Layout.fillWidth: true
+          spacing: Style.spacing.controlGap
+          Repeater {
+            model: [0, 5, 10, 15, 30]
+            Ui.Button {
+              required property int modelData
+              text: modelData ? modelData + " min" : "Off"
+              foreground: Commons.Color.popups.text
+              bordered: true
+              focusable: true
+              enabled: !backend.busy && backend.observation !== null
+              onClicked: backend.setTimer(modelData)
+            }
+          }
+        }
+        RowLayout {
+          Layout.fillWidth: true
+          Ui.TextField {
+            id: customMinutes
+            Layout.fillWidth: true
+            placeholderText: "Custom minutes (minimum 5)"
+            foreground: Commons.Color.popups.text
+            validator: IntValidator { bottom: 5; top: 525600 }
+            onAccepted: if (acceptableInput) backend.setTimer(Number(text))
+          }
+          Ui.Button {
+            text: "Set"
+            foreground: Commons.Color.popups.text
+            bordered: true
+            focusable: true
+            enabled: !backend.busy && backend.observation !== null && customMinutes.acceptableInput
+            onClicked: backend.setTimer(Number(customMinutes.text))
           }
         }
         Text {
@@ -128,7 +166,7 @@ Ui.Panel {
           text: "New circuits affect future connections. Existing streams remain open and a different exit IP is not guaranteed."
           textFormat: Text.PlainText
           wrapMode: Text.Wrap
-          color: Color.popups.text
+          color: Commons.Color.popups.text
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
         }
@@ -138,7 +176,7 @@ Ui.Panel {
           text: backend.details
           textFormat: Text.PlainText
           wrapMode: Text.WrapAnywhere
-          color: Color.popups.text
+          color: Commons.Color.popups.text
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
         }

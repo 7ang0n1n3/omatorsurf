@@ -15,7 +15,11 @@ credentials, public IP addresses, or identifying logs. No response SLA is promis
 
 The widget runs as the desktop user and reads the installed root-owned status
 snapshot. Start, stop, and NEWNYM authenticate through pkexec and invoke the
-fixed-command root helper. There is no bundled passwordless polkit policy.
+fixed-command root helper. Timer configuration also authenticates through pkexec;
+when enabled, the root observation service requests NEWNYM automatically while
+protection is verified, with a minimum interval of five minutes. The timer defaults
+to Off, is shared across monitors, and is cleared on reboot or plugin removal.
+There is no bundled passwordless polkit policy.
 The backend controls its own nftables table and systemd units; Tor runs under
 its dedicated account. Installation requires root writes through pkexec and may
 build the Rust binary as the invoking user. Dependencies are installed separately.

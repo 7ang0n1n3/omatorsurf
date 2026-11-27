@@ -1,6 +1,6 @@
 # Omatorsurf for the Omarchy bar
 
-**Plugin version: 1.0.2** · MIT · Omatorsurf backend 1.0.0 or newer.
+**Plugin version: 1.1.0** · MIT · Omatorsurf backend 1.0.0 or newer.
 
 Native Quickshell plugin for the current Omarchy shell plugin framework. The
 repository-root manifest points to this directory's QML entry point. The local
@@ -45,7 +45,14 @@ to open the popup. All text, IP information and action buttons live in the popup
 | Start / Stop | One toggle; authenticate with pkexec, then enable routing or restore direct networking |
 | Public IP | Tor exit IPv4 while protected; ordinary public IPv4 while off |
 | Status | Tor, firewall, kill switch, DNS, IPv6, observation age and error details |
+| Automatic new circuit | Off, 5, 10, 15, 30 minutes, or a custom whole number (5–525600 minutes); authenticate once to change the timer |
 | New circuit | Authenticate and request NEWNYM for future connections; enabled only when verified protected |
+
+The circuit timer defaults to Off. It runs once per machine even with the popup closed,
+pauses unless protection is verified, and resets its countdown after manual circuit
+changes, Start, or Stop. It is cleared on reboot or plugin removal. Renewals run on
+the next status observation after the interval, so checks can delay them. Failed
+renewals wait a full interval before retrying.
 
 Stop also works in the degraded state. If status is unavailable, the popup offers
 an explicit **Stop / restore network** recovery action. Authentication cancellation
@@ -81,12 +88,13 @@ used. Theme/font changes propagate through the existing shell singletons.
 
 `/usr/local/libexec/omatorsurf-bar` is an installed root-owned copy of the Python
 bridge. Its command vocabulary is fixed: `read`, `observe`, `start`, `stop`,
-`new-circuit`, `activate`, `cleanup`. The last two are installer lifecycle commands.
+`new-circuit`, `timer off|MINUTES`, `activate`, `cleanup`. The last two are installer lifecycle commands.
+The timer accepts only a bounded whole-minute interval, with a five-minute minimum.
 It accepts no executable, configuration path or command
-string. Only `read` runs without root. Each user-requested change goes through
+string. Only `read` runs without root. Each user-requested change (including timer configuration) goes through
 pkexec; no passwordless polkit policy is installed.
 
-`omatorsurf-bar-status.timer` runs a read-only root observation at boot and 15
+`omatorsurf-bar-status.timer` runs a root observation and any due, authenticated circuit renewal at boot and 15
 seconds after each observation completes. The bridge calls the backend's live
 `status --json`, validates its types, then atomically publishes
 `/run/omatorsurf-bar/status.json`. The directory and file must be root-owned,
@@ -106,7 +114,8 @@ timer observations reconcile state. Root publication errors appear in journald.
 The helper retains its runtime lock inode until reboot. Status is shared across
 monitors; there is only one expensive status publisher. The observer service
 uses a read-only system/home sandbox, a private temporary directory and restricted
-address families; its only writable persistent runtime path is its own directory.
+address families; its writable runtime paths are its own directory and the backend runtime directory
+(required for the backend operation lock).
 
 ## Remove
 
@@ -150,6 +159,8 @@ the plugin installer. The bar icon opens the most recent verified observation;
 right-clicking it rereads the local snapshot and does not force a network probe.
 The timer continues when the widget is disabled; use the uninstaller to remove it.
 
-The widget and read-only status publisher have been loaded in the live Omarchy
-shell. Privileged Start/Stop/NEWNYM interactions have not been exercised as part
-of the bar appearance changes.
+The 1.1.0 plugin, helper and service were installed on the live host and checked
+against the checkout. The shell was restarted to clear cached QML. All 54 backend
+tests and five timer tests pass, along with portable and installed-host manifest
+validation. Live timer activation, scheduled NEWNYM and privileged button
+interactions remain unverified.

@@ -6,8 +6,8 @@ After=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/local/libexec/omatorsurf-bar observe
-TimeoutStartSec=180
-RuntimeDirectory=omatorsurf-bar
+TimeoutStartSec=420
+RuntimeDirectory=omatorsurf-bar omatorsurf
 RuntimeDirectoryMode=0755
 RuntimeDirectoryPreserve=yes
 UMask=0022
@@ -16,5 +16,5 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/run/omatorsurf-bar
+ReadWritePaths=/run/omatorsurf-bar /run/omatorsurf
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK

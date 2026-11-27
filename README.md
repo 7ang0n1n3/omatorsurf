@@ -1,6 +1,6 @@
 # omatorsurf
 
-**Backend version: 1.0.0 · Plugin version: 1.0.2** — MIT licensed. The package version is defined in [Cargo.toml](Cargo.toml); check your installed binary with `omatorsurf version` or `omatorsurf --version`.
+**Backend version: 1.0.0 · Plugin version: 1.1.0** — MIT licensed. The package version is defined in [Cargo.toml](Cargo.toml); check your installed binary with `omatorsurf version` or `omatorsurf --version`.
 
 Rust CLI backend for system-wide Tor routing on Arch Linux/Omarchy. The backend manages Tor, nftables and systemd through a command-line interface. Once enabled, the kernel routing rules cover applications, browsers and background services on the host, including applications launched outside the terminal.
 
@@ -8,7 +8,7 @@ Tor routes supported TCP traffic and DNS requests. This build blocks other outbo
 
 ## Marketplace plugin
 
-Plugin **1.0.2**, ID `io.github.7ang0n1n3.omatorsurf`, is exposed by the
+Plugin **1.1.0**, ID `io.github.7ang0n1n3.omatorsurf`, is exposed by the
 [root manifest](manifest.json). The backend has its own version, **1.0.0**.
 The root entry point uses the existing `quickshell-plugin/` sources.
 This plugin requires manual setup of the native backend and root status publisher;
@@ -55,7 +55,7 @@ This installs the backend, the Quickshell bar plugin, and its root status publis
 - An existing default release that is not executable is reported as an error. A missing or non-executable custom binary also fails without an automatic build.
 - Existing `/etc/omatorsurf/config.toml` is preserved. Its configuration determines the generated Tor configuration. A differing installed `torrc` or any of the three backend systemd unit files causes the backend stage to stop before deploying system files; back them up and review the differences before replacement. The plugin stage replaces its helper and two status-publisher unit files without this conflict check.
 - Backs up the existing plugin and `shell.json`, copies the plugin into `~/.config/omarchy/plugins/io.github.7ang0n1n3.omatorsurf/`, waits for discovery, and enables the bar widget. Backups go under `~/.local/state/omatorsurf/plugin-backups/` (`XDG_STATE_HOME` is honored).
-- Enables/starts `omatorsurf-bar-status.timer` for read-only status observations. Installation does not start/enable Tor routing or apply firewall rules. Use the widget's Start button or `pkexec /usr/local/bin/omatorsurf start` afterward.
+- Enables/starts `omatorsurf-bar-status.timer` for status observations and any explicitly enabled circuit renewals. Installation does not start/enable Tor routing or apply firewall rules. Use the widget's Start button or `pkexec /usr/local/bin/omatorsurf start` afterward.
 - If plugin installation fails after backend installation, the backend remains installed. Resolve the reported error and rerun the installer.
 
 To install another existing executable:
@@ -94,9 +94,9 @@ View installer help without root:
 | `/run/omatorsurf/` | Runtime state and transaction lock |
 | `~/.config/omarchy/plugins/io.github.7ang0n1n3.omatorsurf/` | Quickshell widget and manifest for the invoking desktop user |
 | `/usr/local/libexec/omatorsurf-bar` | Root-owned status publisher and authenticated plugin action helper |
-| `/etc/systemd/system/omatorsurf-bar-status.service` | Read-only status observation service |
+| `/etc/systemd/system/omatorsurf-bar-status.service` | Status observation and optional circuit renewal service |
 | `/etc/systemd/system/omatorsurf-bar-status.timer` | Enabled periodic status publisher |
-| `/run/omatorsurf-bar/` | Published status and helper lock |
+| `/run/omatorsurf-bar/` | Published status, circuit timer state and helper lock |
 
 The dedicated Tor service creates its private state under `/var/lib/omatorsurf/tor`. Keep the checkout if you want to use its install/uninstall scripts later; these scripts are not copied into `/usr/local/bin`.
 
@@ -115,7 +115,9 @@ The installer updates both backend and plugin. Use `--backend-only` when updatin
 
 For widget-only changes with an unchanged installed backend, run
 `./quickshell-plugin/install.sh`. Review any backend configuration or unit conflict
-before replacing installed files. `git pull` follows the current branch; it does
+before replacing installed files. If the popup still shows the previous controls
+after an update, run `omarchy restart shell` to clear cached QML (the bar briefly
+restarts). `git pull` follows the current branch; it does
 not pin installation to a marketplace-reviewed commit.
 
 ## Use
@@ -151,7 +153,7 @@ Status reports `protected` only when the complete rules, Tor readiness and a fre
 
 ## Omarchy taskbar plugin
 
-**Plugin version: 1.0.2.** The main installer includes the plugin. To install or update only the plugin against an already installed backend, run as your regular desktop user:
+**Plugin version: 1.1.0.** The main installer includes the plugin. To install or update only the plugin against an already installed backend, run as your regular desktop user:
 
 ```bash
 ./quickshell-plugin/install.sh
@@ -160,9 +162,12 @@ Status reports `protected` only when the complete rules, Tor readiness and a fre
 The installer invokes pkexec for the root status publisher, backs up your shell layout, and enables the native Omarchy bar widget. It does not start Tor routing.
 
 - The bar shows one Nerd Font icon: U+F199A when off, U+F0CCC when verified protected.
-- Clicking it opens a popup with Start/Stop, current public IPv4, status details and New Circuit.
+- Clicking it opens a popup with Start/Stop, current public IPv4, status details, New Circuit and automatic circuit timer controls.
 - Start/Stop enables routing or restores direct networking through pkexec.
 - New Circuit requests future Tor circuits through pkexec; the exit IP may stay the same.
+- Automatic New Circuit offers Off, 5, 10, 15, 30 minutes, and custom whole-minute intervals (5–525600 minutes). Changing the timer authenticates once through pkexec.
+- The timer defaults to Off, runs across monitors with the popup closed, and pauses while protection is unverified. Manual Start/Stop/New Circuit resets its countdown; reboot or plugin removal clears it.
+- Renewals run on the first status observation after the interval expires. Checks can delay renewal; failed attempts wait a full interval before retrying.
 
 Colors, typography, spacing, borders, rounding and popup behavior use the active Omarchy shell theme and shared UI components. Stale or failed observations display Unknown. See the [plugin documentation](quickshell-plugin/README.md) for installation, privilege design, settings and removal. Earlier project testing recorded live bar rendering and read-only status publication; privileged button interactions and the new repository-root entry-point layout still need live validation. See [Validation and limitations](#validation-and-limitations) for the tested scope.
 
@@ -212,7 +217,7 @@ pkexec /usr/bin/systemctl disable --now omatorsurf.service
 pkexec /usr/local/bin/omatorsurf stop
 ```
 
-Manual CLI start does **not** persist protection through reboot. Earlier project testing recorded service startup on a running host; actual reboot, suspend/resume, initramfs networking and network-manager-specific boot ordering still need VM/hardware validation. Do not assume protection before the early guard has successfully installed. Routing at boot is opt-in; installation does not change existing routing service enablement. The full installer enables the plugin's read-only status timer.
+Manual CLI start does **not** persist protection through reboot. Earlier project testing recorded service startup on a running host; actual reboot, suspend/resume, initramfs networking and network-manager-specific boot ordering still need VM/hardware validation. Do not assume protection before the early guard has successfully installed. Routing at boot is opt-in; installation does not change existing routing service enablement. The full installer enables the plugin's status timer (automatic circuit renewal defaults to Off).
 
 ## Uninstall
 
@@ -294,9 +299,12 @@ pkexec /usr/bin/env RUST_LOG=debug /usr/local/bin/omatorsurf check
 
 ## Validation and limitations
 
-During submission preparation, the installed Omarchy validator accepted the root
-manifest, portable packaging/syntax checks passed, and all 54 backend unit tests
-passed. These checks do not establish live compatibility or constitute a security
+For plugin 1.1.0, the installed Omarchy validator accepted the root manifest,
+portable packaging/syntax checks passed, and all 54 backend tests plus five
+circuit timer tests passed. The local plugin, helper and service were updated
+and compared with the checkout. The shell was restarted and its IPC and
+notification service recovered. Live timer activation and scheduled NEWNYM
+have not been exercised. These checks do not establish live compatibility or constitute a security
 audit. No exact host Omarchy source revision was recorded.
 
 Fresh install, upgrade and removal journeys on a disposable host, live loading

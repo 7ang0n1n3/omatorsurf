@@ -21,6 +21,7 @@ Item {
   readonly property string publicIp: !busy && status && observation.current_ip ? observation.current_ip : "Unknown"
   readonly property string statusText: {
     var action = actionRunning ? actionName : publisherBusy
+    if (action === "timer") return "Updating timer"
     if (action === "start") return "Starting"
     if (action === "stop") return "Stopping"
     if (action === "new-circuit") return "Changing circuit"
@@ -44,6 +45,18 @@ Item {
     if (!reader.running) reader.running = true
   }
 
+  readonly property int timerMinutes: observation && observation.circuit_timer ? observation.circuit_timer.minutes : 0
+  readonly property string timerText: timerMinutes ? "Every " + timerMinutes + " min" +
+      (protectedRoute ? " · next in " + Math.max(0, Math.ceil((observation.circuit_timer.next_at - now) / 60)) + " min" : " · paused") : "Off"
+
+  function setTimer(minutes) {
+    if (busy || (minutes !== 0 && (!Number.isInteger(minutes) || minutes < 5 || minutes > 525600))) return
+    actionError = ""
+    actionName = "timer"
+    actionProcess.command = ["/usr/bin/pkexec", "/usr/local/libexec/omatorsurf-bar", "timer", minutes === 0 ? "off" : String(minutes)]
+    actionProcess.running = true
+  }
+
   function act(command) {
     if (busy || ["start", "stop", "new-circuit"].indexOf(command) < 0) return
     if (command === "new-circuit" && !protectedRoute) return
@@ -61,6 +74,11 @@ Item {
         || ["", "start", "stop", "new-circuit"].indexOf(value.busy) < 0
         || typeof value.error !== "string" || typeof value.ip_error !== "string")
       throw new Error("Invalid status observation")
+    var timer = value.circuit_timer
+    if (timer !== undefined && (!timer || !Number.isInteger(timer.minutes)
+        || (timer.minutes !== 0 && (timer.minutes < 5 || timer.minutes > 525600))
+        || (timer.minutes !== 0 && (typeof timer.next_at !== "number" || !isFinite(timer.next_at)))))
+      throw new Error("Invalid circuit timer observation")
     var s = value.status
     if (s !== null) {
       if (!s || ["protected", "degraded", "disabled"].indexOf(s.protection_state) < 0
